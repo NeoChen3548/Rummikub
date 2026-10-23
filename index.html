@@ -234,6 +234,7 @@ function render(){
     <div class="row"><button data-a="rules">Правила</button><button class="pri" data-a="start">Начать игру</button></div></div></div>${RULES?rulesHtml():''}`;
     fillNicks();return;
   }
+  const st=['#table','#rack'].map(s=>{const e=$(s);return e?[e.scrollTop,e.scrollLeft]:[0,0]});
   const v=viewer(),c=cur();
   const rack=v>=0?[...G.players[v].rack].sort(G.sort=='c'?cmp:cmpN):[];
   const played=c.rack.length<G.snap.rack.length;
@@ -252,6 +253,7 @@ function render(){
       <table><tr><th>Игрок</th><th>За партию</th><th>Всего</th></tr>${G.result.rows.map(([n,d])=>`<tr><td>${n}</td><td>${d>0?'+':''}${d}</td><td>${G.players.find(p=>p.name==n).score}</td></tr>`).join('')}</table>
       <div class="row"><button data-a="menu">В меню</button><button class="pri" data-a="deal">Следующая партия</button></div></div></div>`:''}
     ${RULES?rulesHtml():''}`;
+  ['#table','#rack'].forEach((s,i)=>{const e=$(s);if(e){e.scrollTop=st[i][0];e.scrollLeft=st[i][1]}});
   const fv=viewer(),fp=fv>=0&&G.players[fv];
   if(fp&&fp.fresh!=null&&!G.ft)G.ft=setTimeout(()=>{G.ft=0;if(G){fp.fresh=null;render()}},2500);
 }
