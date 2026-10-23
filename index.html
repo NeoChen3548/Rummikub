@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Руммикуб</title>
+<meta name="description" content="Руммикуб онлайн: играйте против компьютера или вдвоём–вчетвером на одном устройстве.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E🧩%3C/text%3E%3C/svg%3E">
+<style>
+:root{--bg:#1f6a50;--bg2:#174c3b;--card:#fffaf0;--ink:#1d1d1b;--acc:#f5b83d;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#143d30;--bg2:#0e2b22}}
+:root[data-theme="dark"]{--bg:#143d30;--bg2:#0e2b22}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:#f4f1e8;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column}
+button,select{font:inherit;border-radius:8px;border:0;padding:8px 12px;cursor:pointer}
+button{background:#ffffff22;color:#fff}button.pri{background:var(--acc);color:#2a1d00;font-weight:700}
+button:hover{filter:brightness(1.15)}
+#app{flex:1;display:flex;flex-direction:column;min-height:0}
+.top{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;background:var(--bg2);align-items:center}
+.chip{padding:4px 10px;border-radius:20px;background:#ffffff18;font-size:13px}
+.chip.cur{background:var(--acc);color:#2a1d00;font-weight:700}
+#msg{padding:6px 12px;font-size:14px;min-height:30px;background:#0003}
+#table{flex:1;min-height:0;overflow:auto;display:flex;flex-wrap:wrap;gap:10px;padding:12px;align-content:flex-start}
+.set{display:flex;gap:3px;padding:6px;background:#ffffff14;border-radius:8px;border:2px solid #ffffff22;cursor:pointer}
+.set.bad{border-color:#ff6b6b}.set.lock{opacity:.85}
+.newset{border:2px dashed #ffffff55;border-radius:8px;padding:16px 18px;cursor:pointer;color:#ffffffaa;align-self:flex-start}
+.tile{width:34px;height:46px;background:var(--card);color:var(--ink);border-radius:6px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;font-size:20px;line-height:1;box-shadow:0 2px 0 #b9ad8a;cursor:pointer;user-select:none;transition:transform .1s}
+.tile small{font-size:11px;margin-top:2px}
+.c0{color:#222}.c1{color:#1d5fd1}.c2{color:#d12a2a}.c3{color:#e07b00}.j{color:#8a2be2}
+.tile.sel{outline:3px solid #ffd43b;transform:translateY(-5px)}
+.tile.new{box-shadow:0 2px 0 #b9ad8a,0 0 0 2px #38bdf8}
+.tile.fresh{outline:3px solid #4ade80;box-shadow:0 0 14px 4px #4ade80;animation:pulse .6s ease-in-out 4}
+@keyframes pulse{50%{transform:translateY(-8px) scale(1.12)}}
+.box input{font:inherit;padding:8px;border-radius:8px;border:1px solid #bbb;background:#fff;color:#222;width:55%}
+.bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;background:var(--bg2)}
+#rack{display:flex;flex-wrap:wrap;gap:4px;padding:10px;margin:0 8px 8px;background:#6b4a2b;border-radius:10px;min-height:68px;max-height:34vh;overflow:auto}
+.ov{position:fixed;inset:0;background:#000b;display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.box{background:#fffaf0;color:#222;border-radius:14px;padding:20px;max-width:560px;max-height:88vh;overflow:auto;width:100%}
+.box h2{margin-top:0}.box li{margin:5px 0}.box button{background:#e8dcc0;color:#222}.box button.pri{background:var(--acc)}
+.box select{background:#e8dcc0;color:#222}
+.row{display:flex;gap:10px;align-items:center;margin:10px 0;justify-content:space-between}
+table{width:100%;border-collapse:collapse}td,th{padding:4px;text-align:left;border-bottom:1px solid #0002}
+@media(max-width:600px){.tile{width:29px;height:41px;font-size:17px}}
+</style></head><body>
+<div id="app"></div>
+<script>
+const $=s=>document.querySelector(s),esc=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const col=i=>i>=104?-1:Math.floor(i/26),num=i=>i>=104?0:i%13+1,isJ=i=>i>=104;
+const cmp=(a,b)=>(isJ(a)-isJ(b))||col(a)-col(b)||num(a)-num(b);
+const cmpN=(a,b)=>(isJ(a)-isJ(b))||num(a)-num(b)||col(a)-col(b);
+const clone=t=>t.map(s=>s.slice()),pts=r=>r.reduce((s,i)=>s+(isJ(i)?30:num(i)),0);
+let G=null,CFG={h:1,a:1,lim:0,names:[]},RULES=false;
+
+/* ---------- Проверка набора ---------- */
+function check(ids){
+  const n=ids.length;if(n<3)return null;
+  const rs=ids.filter(i=>!isJ(i));if(!rs.length)return null;
+  const nums=rs.map(num),cols=rs.map(col);
+  if(n<=4&&nums.every(x=>x==nums[0])&&new Set(cols).size==rs.length){
+    return{ord:ids.map(i=>({id:i,v:nums[0]})),val:nums[0]*n};
+  }
+  if(new Set(cols).size==1){
+    const i0=ids.findIndex(i=>!isJ(i)),start=num(ids[i0])-i0;
+    if(start<1||start+n-1>13)return null;
+    const ord=[];let val=0;
+    for(let p=0;p<n;p++){const v=start+p;if(!isJ(ids[p])&&num(ids[p])!=v)return null;ord.push({id:ids[p],v});val+=v}
+    return{ord,val};
+  }
+  return null;
+}
+
+/* ---------- ИИ ---------- */
+function cands(cnt,jk){
+  const out=[];
+  for(let n=1;n<=13;n++){
+    const cs=[0,1,2,3].filter(c=>cnt[c][n]>0);
+    for(let mk=0;mk<16;mk++){
+      const sub=cs.filter(c=>mk>>c&1),k=sub.length;
+      if(k>=3||(k==2&&jk>0))out.push({cells:sub.map(c=>[c,n]),j:k==2?1:0,val:n*(k==2?3:k)});
+    }
+  }
+  for(let c=0;c<4;c++)for(let a=1;a<=11;a++){
+    let j=0,cells=[],v=0,seq=[];
+    for(let b=a;b<=13;b++){
+      if(cnt[c][b]>0){cells.push([c,b]);seq.push([c,b])}else{j++;if(j>jk)break;seq.push(0)}
+      v+=b;
+      if(b-a>=2&&cells.length)out.push({cells:cells.slice(),seq:seq.slice(),j,val:v});
+    }
+  }
+  return out.sort((x,y)=>(y.cells.length+y.j)-(x.cells.length+x.j));
+}
+function best(rack,need){
+  const cnt=[0,1,2,3].map(()=>Array(14).fill(0)),pool={},J=[];
+  rack.forEach(id=>{if(isJ(id))J.push(id);else{cnt[col(id)][num(id)]++;(pool[col(id)+','+num(id)]??=[]).push(id)}});
+  const cs=cands(cnt,J.length);let top=null,nodes=0;
+  (function rec(i,jk,ch,count,val){
+    if(nodes++>30000)return;
+    if(count>0&&val>=need&&(!top||count>top.count||(count==top.count&&val>top.val)))top={ch:ch.slice(),count,val};
+    for(let k=i;k<cs.length;k++){
+      const s=cs[k];if(s.j>jk||!s.cells.every(([c,n])=>cnt[c][n]>0))continue;
+      s.cells.forEach(([c,n])=>cnt[c][n]--);ch.push(s);
+      rec(k,jk-s.j,ch,count+s.cells.length+s.j,val+s.val);
+      ch.pop();s.cells.forEach(([c,n])=>cnt[c][n]++);
+    }
+  })(0,J.length,[],0,0);
+  if(!top)return null;let jp=0;
+  const sets=top.ch.map(s=>{if(s.seq)return s.seq.map(x=>x?pool[x[0]+','+x[1]].pop():J[jp++]);const ids=s.cells.map(([c,n])=>pool[c+','+n].pop());for(let q=0;q<s.j;q++)ids.push(J[jp++]);return ids});
+  return{sets,count:top.count};
+}
+function aiTurn(){
+  if(!G||G.over||!cur().ai)return;
+  const me=G.cur,m=G.melded[me];let rack=cur().rack.slice(),table=clone(G.table),placed=0,did=false;
+  const r=best(rack,m?1:30);
+  if(r){did=true;r.sets.forEach(s=>{table.push(s);placed+=s.length;rack=rack.filter(x=>!s.includes(x))})}
+  if(m||did){
+    const ext=()=>{let ch=true;while(ch){ch=false;for(const id of rack.slice()){
+      if(isJ(id)&&rack.length>3)continue;
+      for(const s of table){if(check(s.concat(id))){s.push(id)}else if(check([id].concat(s))){s.unshift(id)}else continue;rack=rack.filter(x=>x!=id);placed++;ch=true;break}}}};
+    if(m)ext();
+    if(m)for(const s of table.slice()){
+      if(s.length<4)continue;
+      for(const id of s.slice()){
+        if(isJ(id))continue;const rest=s.filter(x=>x!=id);if(!check(rest))continue;
+        const r2=best(rack.concat(id),1);
+        if(r2&&r2.count>1&&r2.sets.some(t=>t.includes(id))){
+          s.splice(0,s.length,...rest);
+          r2.sets.forEach(t=>{table.push(t);placed+=t.filter(x=>x!=id).length;rack=rack.filter(x=>!t.includes(x))});
+          did=true;break;
+        }
+      }
+    }
+    if(m)ext();
+  }
+  if(!placed){draw();return}
+  cur().rack=rack;G.table=table.filter(s=>s.length);G.melded[me]=true;G.passes=0;
+  G.last=`${cur().name} выложил(а) фишек: ${placed}`;next();
+}
+
+/* ---------- Игра ---------- */
+const cur=()=>G.players[G.cur];
+function newGame(){
+  const P=[];
+  for(let i=0;i<CFG.h;i++)P.push({name:esc(CFG.names[i]),ai:false,rack:[],score:0});
+  for(let i=0;i<CFG.a;i++)P.push({name:'Компьютер'+(CFG.a>1?' '+(i+1):''),ai:true,rack:[],score:0});
+  G={players:P,start:0,sort:'c',limit:CFG.lim,sel:new Set(),over:false};CFG.names=[];deal();
+}
+function deal(){
+  const ids=[...Array(106).keys()];
+  for(let i=ids.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[ids[i],ids[j]]=[ids[j],ids[i]]}
+  G.players.forEach(p=>p.rack=ids.splice(0,14));
+  G.pool=ids;G.table=[];G.melded=G.players.map(()=>false);G.passes=0;G.over=false;G.result=null;
+  G.cur=G.start++%G.players.length;G.last='Новая партия. Первый ход: '+cur().name;startTurn();
+}
+function startTurn(){
+  G.snap={rack:cur().rack.slice(),table:clone(G.table)};
+  G.base=new Set(G.table.flat());G.sel.clear();
+  G.hide=CFG.h>1&&!cur().ai;
+  clearInterval(G.iv);
+  if(G.limit&&!cur().ai){G.t=G.limit;G.iv=setInterval(()=>{
+    if(G.hide||G.over)return;
+    if(--G.t<=0){clearInterval(G.iv);G.last='Время вышло — ход сброшен, взята фишка.';draw()}
+    else{const e=$('#tm');if(e)e.textContent='⏱ '+G.t+' с'}
+  },1000)}
+  render();
+  if(cur().ai){const id=G.start;setTimeout(()=>{if(G&&!G.over&&G.start==id)aiTurn()},1100)}
+}
+function draw(){
+  const p=cur();p.rack=G.snap.rack.slice();G.table=clone(G.snap.table);
+  if(G.pool.length){const f=G.pool.pop();p.rack.push(f);p.fresh=f;G.passes=0;G.last=p.name+' взял(а) фишку из банка'}
+  else{G.passes++;G.last=p.name+' пропускает ход (банк пуст)'}
+  next();
+}
+function next(){
+  clearInterval(G.iv);G.sel.clear();
+  if(!cur().rack.length)return roundEnd(G.cur,false);
+  if(G.passes>=G.players.length){
+    let w=0;G.players.forEach((p,i)=>{if(pts(p.rack)<pts(G.players[w].rack))w=i});return roundEnd(w,true);
+  }
+  G.cur=(G.cur+1)%G.players.length;startTurn();
+}
+function roundEnd(w,blocked){
+  G.over=true;const ws=pts(G.players[w].rack);let gain=0;const rows=[];
+  G.players.forEach((p,i)=>{
+    if(i==w)return;const pen=pts(p.rack)-(blocked?ws:0);p.score-=pen;gain+=pen;rows.push([p.name,-pen]);
+  });
+  G.players[w].score+=gain;rows.unshift([G.players[w].name,gain]);
+  G.result={w:G.players[w].name,blocked,rows};render();
+}
+function locked(s){return !G.melded[G.cur]&&s.some(i=>G.base.has(i))}
+function mv(to){
+  if(!G.sel.size)return msg('Сначала выберите фишки.');
+  if(to>=0&&locked(G.table[to]))return msg('Пока вы не выложили 30 очков, чужие наборы трогать нельзя.');
+  const ids=[...G.sel],p=cur();
+  ids.forEach(id=>{p.rack=p.rack.filter(x=>x!=id);G.table=G.table.map(s=>s.filter(x=>x!=id))});
+  if(to<0)G.table.push(ids);else{const t=G.table[to];let done=false;for(let k=t.length;k>=0&&!done;k--){const c=[...t.slice(0,k),...ids,...t.slice(k)];if(check(c)){G.table[to]=c;done=true}}if(!done)t.push(...ids)}
+  G.table=G.table.filter(s=>s.length);G.sel.clear();render();
+}
+function back(){
+  const ids=[...G.sel].filter(i=>!cur().rack.includes(i));
+  if(!ids.length)return msg('Выберите фишки на столе, которые вы выложили в этот ход.');
+  if(ids.some(i=>G.base.has(i)))return msg('Фишки, лежавшие на столе до вашего хода, на стойку вернуть нельзя.');
+  ids.forEach(id=>{G.table=G.table.map(s=>s.filter(x=>x!=id));cur().rack.push(id)});
+  G.table=G.table.filter(s=>s.length);G.sel.clear();render();
+}
+function endTurn(){
+  const p=cur();
+  if(p.rack.length>=G.snap.rack.length)return draw();
+  let sum=0;
+  for(const s of G.table){
+    const c=check(s);if(!c)return msg('На столе есть неверные наборы (красная рамка). Проверьте состав и порядок фишек (серия — по возрастанию слева направо) или сбросьте ход.');
+    if(!G.melded[G.cur]&&!s.some(i=>G.base.has(i)))sum+=c.val;
+  }
+  if(!G.melded[G.cur]&&sum<30)return msg(`Первая выкладка: нужно минимум 30 очков, сейчас ${sum}.`);
+  G.melded[G.cur]=true;G.passes=0;G.last=p.name+' выложил(а) фишки';next();
+}
+function msg(t){G.last=t;const e=$('#msg');if(e)e.textContent=t}
+
+/* ---------- Отрисовка ---------- */
+function tile(id,v){
+  const s=(G.sel.has(id)?' sel':'')+(G.players[viewer()]?.fresh===id?' fresh':''),nw=(!G.base.has(id)&&!cur().rack.includes(id))?' new':'';
+  return isJ(id)?`<div class="tile j${s}${nw}" data-t="${id}">☺${v?`<small>${v}</small>`:''}</div>`
+    :`<div class="tile c${col(id)}${s}${nw}" data-t="${id}">${num(id)}</div>`;
+}
+function viewer(){const c=cur();if(!c.ai)return G.hide?-1:G.cur;return CFG.h==1?0:-1}
+function render(){
+  const A=$('#app');
+  if(!G){
+    A.innerHTML=`<div class="ov"><div class="box"><h2>🧩 Руммикуб</h2>
+    <p>Цифровая версия настольной игры. Играйте против компьютера или вдвоём–вчетвером на одном устройстве.</p>
+    <div class="row"><label>Людей</label><select id="h">${[1,2,3,4].map(i=>`<option ${i==CFG.h?'selected':''}>${i}</option>`).join('')}</select></div>
+    <div id="nicks"></div>
+    <div class="row"><label>Компьютеров</label><select id="a">${[0,1,2,3].map(i=>`<option ${i==CFG.a?'selected':''}>${i}</option>`).join('')}</select></div>
+    <div class="row"><label>Лимит времени на ход</label><select id="l">${[[0,'без лимита'],[60,'60 секунд'],[120,'120 секунд']].map(([v,t])=>`<option value="${v}" ${v==CFG.lim?'selected':''}>${t}</option>`)}</select></div>
+    <p id="err" style="color:#b00"></p>
+    <div class="row"><button data-a="rules">Правила</button><button class="pri" data-a="start">Начать игру</button></div></div></div>${RULES?rulesHtml():''}`;
+    fillNicks();return;
+  }
+  const v=viewer(),c=cur();
+  const rack=v>=0?[...G.players[v].rack].sort(G.sort=='c'?cmp:cmpN):[];
+  const played=c.rack.length<G.snap.rack.length;
+  const humanTurn=!c.ai&&!G.over&&!G.hide;
+  A.innerHTML=`<div class="top">${G.players.map((p,i)=>`<span class="chip ${i==G.cur&&!G.over?'cur':''}">${p.name}: ${p.rack.length} фиш. · ${p.score>0?'+':''}${p.score}</span>`).join('')}
+    <span class="chip">Банк: ${G.pool.length}</span>${G.limit&&humanTurn?`<span class="chip" id="tm">⏱ ${G.t} с</span>`:''}
+    <span style="flex:1"></span><button data-a="rules">Правила</button><button data-a="menu">Меню</button></div>
+    <div id="msg">${c.ai&&!G.over?'Ход компьютера… ':''}${G.last||''}</div>
+    <div id="table">${G.table.map((s,i)=>{const k=check(s),o=s.map(id=>({id,v:k?k.ord.find(x=>x.id==id).v:0}));
+      return`<div class="set ${k?'':'bad'} ${locked(s)&&humanTurn?'lock':''}" data-s="${i}">${o.map(x=>tile(x.id,isJ(x.id)&&k?x.v:0)).join('')}</div>`}).join('')}
+      ${humanTurn?'<div class="newset" data-a="new">＋ Новый набор из выбранных</div>':''}</div>
+    ${humanTurn?`<div class="bar"><button data-a="back">↩ На стойку</button><button data-a="reset">⟲ Сбросить ход</button><button data-a="sort">Сортировка: ${G.sort=='c'?'по цвету':'по числу'}</button><span style="flex:1"></span><button class="pri" data-a="end">${played?'Завершить ход':'Взять фишку'}</button></div>`:''}
+    <div id="rack">${rack.map(id=>tile(id)).join('')||`<span style="opacity:.7;padding:8px">${c.ai?'Ходит компьютер':'Стойка скрыта'}</span>`}</div>
+    ${G.hide&&!G.over?`<div class="ov"><div class="box" style="text-align:center"><h2>Ход: ${c.name}</h2><p>Передайте устройство игроку. Остальные — не подглядывайте!</p><button class="pri" data-a="ready">Я готов(а)</button></div></div>`:''}
+    ${G.result?`<div class="ov"><div class="box"><h2>🎉 Победил(а): ${G.result.w}</h2><p>${G.result.blocked?'Банк пуст и ходов больше нет — побеждает игрок с наименьшей суммой очков.':'«Руммикуб!» — все фишки выложены.'}</p>
+      <table><tr><th>Игрок</th><th>За партию</th><th>Всего</th></tr>${G.result.rows.map(([n,d])=>`<tr><td>${n}</td><td>${d>0?'+':''}${d}</td><td>${G.players.find(p=>p.name==n).score}</td></tr>`).join('')}</table>
+      <div class="row"><button data-a="menu">В меню</button><button class="pri" data-a="deal">Следующая партия</button></div></div></div>`:''}
+    ${RULES?rulesHtml():''}`;
+  const fv=viewer(),fp=fv>=0&&G.players[fv];
+  if(fp&&fp.fresh!=null&&!G.ft)G.ft=setTimeout(()=>{G.ft=0;if(G){fp.fresh=null;render()}},2500);
+}
+function rulesHtml(){return`<div class="ov"><div class="box"><h2>Правила Руммикуба</h2><ul>
+<li><b>Цель:</b> первым выложить на стол все фишки со своей стойки.</li>
+<li><b>Комплект:</b> 106 фишек — числа 1–13 четырёх цветов (чёрный, синий, красный, оранжевый) по две штуки и 2 джокера (☺). Каждый получает 14 фишек, остальные образуют банк.</li>
+<li><b>Группа:</b> 3–4 фишки одного числа разных цветов.</li>
+<li><b>Серия:</b> 3 и более подряд идущих числа одного цвета, выложенные по возрастанию слева направо (джокер занимает своё место в ряду). Единица — только начало серии, после 13 её продолжать нельзя.</li>
+<li><b>Первая выкладка:</b> наборы только из своих фишек на сумму не менее 30 очков (джокер считается как заменяемая фишка). До этого трогать наборы на столе нельзя.</li>
+<li><b>Дальше</b> можно выкладывать новые наборы, добавлять фишки к существующим и свободно перестраивать стол: разделять серии, брать 4-ю фишку из группы, перекладывать фишки. К концу хода все наборы на столе должны быть верными, и вы должны выложить хотя бы одну свою фишку.</li>
+<li><b>Джокер</b> заменяет любую фишку. Джокер со стола можно забрать, положив вместо него ту фишку, которую он заменял, но забранный джокер нужно сразу использовать в другом наборе.</li>
+<li><b>Нет хода</b> — возьмите фишку из банка (ход закончен). Если банк пуст, ход пропускается. При включённом лимите времени по его истечении ход сбрасывается и берётся фишка.</li>
+<li><b>Конец партии:</b> кто первым выложил все фишки, кричит «Руммикуб!». Победитель получает плюс, равный сумме очков фишек на стойках соперников, соперники — минус свою сумму; джокер в руке = 30 очков. Если банк пуст и никто не может ходить, побеждает игрок с наименьшей суммой.</li>
+</ul><p><b>Управление:</b> нажмите на фишки, чтобы выбрать их (можно несколько), затем нажмите на набор на столе или «Новый набор». Новый набор складывается в том порядке, в котором вы выбирали фишки, поэтому выбирайте серию по возрастанию. При добавлении к готовому набору фишки встают на подходящее место сами. Фишки с голубой рамкой выложены в этот ход.</p>
+<div style="text-align:right"><button class="pri" data-a="closerules">Понятно</button></div></div></div>`}
+
+document.addEventListener('click',e=>{
+  const a=e.target.closest('[data-a]')?.dataset.a;
+  if(a){
+    if(a=='rules'){if(!G)saveForm();RULES=true;return render()}
+    if(a=='closerules'){RULES=false;return render()}
+    if(a=='start'){saveForm();const e=$('#err'),N=CFG.names,low=N.map(n=>n.toLowerCase());
+      if(CFG.h+CFG.a<2||CFG.h+CFG.a>4)return e.textContent='Нужно от 2 до 4 игроков в сумме.';
+      if(N.some(n=>!n))return e.textContent='Каждый игрок должен ввести свой ник.';
+      if(new Set(low).size<N.length||low.some(n=>/^компьютер( \d)?$/.test(n)))return e.textContent='Ники должны быть разными и не совпадать с именами компьютеров.';
+      return newGame()}
+    if(a=='menu'){if(G){clearInterval(G.iv);G=null}return render()}
+    if(a=='deal')return deal();
+    if(!G||G.over||cur().ai)return;
+    if(a=='ready'){G.hide=false;return render()}
+    if(G.hide)return;
+    if(a=='new')mv(-1);
+    else if(a=='back')back();
+    else if(a=='reset'){cur().rack=G.snap.rack.slice();G.table=clone(G.snap.table);G.sel.clear();G.last='Ход сброшен.';render()}
+    else if(a=='sort'){G.sort=G.sort=='c'?'n':'c';render()}
+    else if(a=='end')endTurn();
+    return;
+  }
+  if(!G||G.over||cur().ai||G.hide)return;
+  const t=e.target.closest('[data-t]');
+  if(t){
+    const id=+t.dataset.t;
+    if(!cur().rack.includes(id)&&!G.melded[G.cur]&&G.base.has(id))return msg('Пока вы не выложили 30 очков, чужие наборы трогать нельзя.');
+    G.sel.has(id)?G.sel.delete(id):G.sel.add(id);return render();
+  }
+  const s=e.target.closest('[data-s]');
+  if(s)mv(+s.dataset.s);
+});
+function saveForm(){CFG.h=+$('#h').value;CFG.a=+$('#a').value;CFG.lim=+$('#l').value;CFG.names=[...document.querySelectorAll('.nick')].map(x=>x.value.trim())}
+function fillNicks(){
+  const h=+$('#h').value,old=[...document.querySelectorAll('.nick')].map(x=>x.value);
+  $('#nicks').innerHTML=Array.from({length:h},(_,i)=>`<div class="row"><label>Ник${h>1?' игрока '+(i+1):''}</label><input class="nick" maxlength="14" placeholder="Введите ник" value="${esc(old[i]??CFG.names[i]??'')}"></div>`).join('');
+}
+document.addEventListener('change',e=>{if(e.target.id=='h'){$('#a').value=e.target.value==1?1:0;fillNicks()}});
+render();
+</script></body></html>
